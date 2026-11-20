@@ -16,7 +16,7 @@ import 'package:small_school_management/screens/weekly_report_screen.dart';
 import 'package:small_school_management/screens/settings_screen.dart';
 
 void main() {
-  runApp(const SchoolApp);
+  runApp(const SchoolApp());
 }
 
 class SchoolApp extends StatelessWidget {

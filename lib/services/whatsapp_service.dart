@@ -28,10 +28,12 @@ class WhatsAppService {
         ? 'Assalam-o-Alaikum! $studentName ki haftawar report file share kar rahe hain.\n$comment\n\n- School Management'
         : 'Assalam-o-Alaikum! $studentName ki haftawar report file share kar rahe hain.\n- School Management';
     try {
-      await Share.shareXFiles(
-        [XFile(pdfFile.path)],
-        text: text,
-        subject: '$studentName - Weekly Report',
+      await SharePlus.instance.share(
+        ShareParams(
+          files: [XFile(pdfFile.path)],
+          text: text,
+          subject: '$studentName - Weekly Report',
+        ),
       );
       return true;
     } catch (e) {

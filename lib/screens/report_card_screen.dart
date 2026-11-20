@@ -30,7 +30,6 @@ class _ReportCardScreenState extends State<ReportCardScreen> {
     Student? s;
     for (final x in students) { if (x.rollNo == _rollC.text) { s = x; break; } }
     if (s == null) {
-    if (s == null) {
       setState(() => _loading = false);
       ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('Student not found')));
       return;

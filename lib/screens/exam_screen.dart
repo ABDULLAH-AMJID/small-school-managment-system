@@ -40,14 +40,16 @@ class _ExamScreenState extends State<ExamScreen> {
             child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
               Text('Add Exam', style: AppTheme.subHeading),
               const SizedBox(height: 10),
-              Row(children: [Expanded(child: _tf(_nameC, 'Exam Name (Mid Term/Final)')), const SizedBox(width: 8), Expanded(child: _tf(_classC, 'Class')]),
+              Row(children: [Expanded(child: _tf(_nameC, 'Exam Name (Mid Term/Final)')), const SizedBox(width: 8), Expanded(child: _tf(_classC, 'Class'))]),
               const SizedBox(height: 10),
-              Expanded(child: _tf(_startC, 'Start Date (yyyy-MM-dd)')),
-              const SizedBox(width: 8),
-              Expanded(child: _tf(_endC, 'End Date (yyyy-MM-dd)')),
+              Row(children: [
+                Expanded(child: _tf(_startC, 'Start Date (yyyy-MM-dd)')),
+                const SizedBox(width: 8),
+                Expanded(child: _tf(_endC, 'End Date (yyyy-MM-dd)')),
+              ]),
               const SizedBox(height: 12),
               SizedBox(width: double.infinity, height: 40, child: ElevatedButton(onPressed: _save, child: Text('Save Exam'))),
-            ])),
+            ]),
           )),
           Expanded(child: _loading ? const Center(child: CircularProgressIndicator()) : _exams.isEmpty
               ? const Center(child: Text('No exams scheduled.'))
