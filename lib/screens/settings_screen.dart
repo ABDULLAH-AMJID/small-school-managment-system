@@ -1,6 +1,5 @@
 import 'package:flutter/material.dart';
 import 'package:small_school_management/services/update_service.dart';
-import 'package:small_school_management/utils/app_theme.dart';
 
 class SettingsScreen extends StatefulWidget {
   const SettingsScreen({super.key});
@@ -10,60 +9,113 @@ class SettingsScreen extends StatefulWidget {
 
 class _SettingsScreenState extends State<SettingsScreen> {
   final _update = UpdateService();
-  bool _checked = false;
+  bool _busy = false;
 
   @override
   void initState() {
     super.initState();
-    _update.autoCheck();
+    // Pehle installed version maloom karo, phir silent check.
+    _update.init().then((_) {
+      if (mounted) setState(() {});
+      return _update.autoCheck();
+    }).then((_) {
+      if (mounted) setState(() {});
+    });
   }
 
   Future<void> _manualCheck() async {
-    setState(() => _checked = true);
+    setState(() => _busy = true);
     final available = await _update.checkForUpdates();
-    setState(() => _checked = false);
+    if (!mounted) return;
+    setState(() => _busy = false);
+
+    final messenger = ScaffoldMessenger.of(context);
+
     if (available) {
-      showDialog(context: context, builder: (_) => AlertDialog(
-        title: Text('Update Available'),
-        content: Text('New version ${_update.latestVersion} is available.\n${_update.updateNotes ?? ''}'),
-        actions: [
-          TextButton(onPressed: () => Navigator.pop(context), child: Text('Later')),
-          ElevatedButton(onPressed: () { Navigator.pop(context); _update.applyUpdate(context); }, child: Text('Update Now')),
-        ],
-      ));
+      showDialog<void>(
+        context: context,
+        builder: (dialogContext) => AlertDialog(
+          title: const Text('Update Available'),
+          content: Text(
+            'Naya version ${_update.latestVersion} dastyab hai.\n'
+            'Aap ka version: ${_update.currentVersion}\n\n'
+            '${_update.updateNotes ?? ''}\n\n'
+            'Update ke liye nayi APK download karke install karni hogi.',
+          ),
+          actions: [
+            TextButton(
+              onPressed: () => Navigator.pop(dialogContext),
+              child: const Text('Baad mein'),
+            ),
+            ElevatedButton(
+              onPressed: () {
+                Navigator.pop(dialogContext);
+                _update.openDownloadPage(context);
+              },
+              child: const Text('APK Download karein'),
+            ),
+          ],
+        ),
+      );
+    } else if (_update.lastError != null) {
+      messenger.showSnackBar(
+        SnackBar(content: Text('Update check fail: ${_update.lastError}')),
+      );
     } else {
-      ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('App is up to date.')));
+      messenger.showSnackBar(
+        SnackBar(
+            content: Text('App up to date hai (v${_update.currentVersion}).')),
+      );
     }
   }
 
   @override
   Widget build(BuildContext context) {
     return Scaffold(
-      appBar: AppBar(title: Text('Settings'), leading: const BackButton()),
+      appBar:
+          AppBar(title: const Text('Settings'), leading: const BackButton()),
       body: ListView(
         children: [
           ListTile(
-            title: Text('Auto Update'),
-            subtitle: Text('Shorebird OTA updates apply on app restart'),
-            trailing: Switch(value: _update.autoUpdateEnabled, onChanged: (v) => setState(() => _update.autoUpdateEnabled = v)),
+            title: const Text('Auto Update Check'),
+            subtitle: const Text(
+              'App khulne par naya version check hota hai (Shorebird OTA nahi — '
+              'nayi APK install karni parti hai)',
+            ),
+            trailing: Switch(
+              value: _update.autoUpdateEnabled,
+              onChanged: (v) => setState(() => _update.autoUpdateEnabled = v),
+            ),
           ),
           const Divider(),
           ListTile(
-            title: Text('Check for Updates (Manual)'),
-            subtitle: Text('Only downloads changed code (small, fast)'),
-            trailing: _checked ? const SizedBox(width: 16, height: 16, child: CircularProgressIndicator(strokeWidth: 2)) : Icon(Icons.refresh),
-            onTap: _manualCheck,
+            title: const Text('Check for Updates'),
+            subtitle: Text(
+              _busy
+                  ? 'Check ho raha hai...'
+                  : 'GitHub se latest version check karein',
+            ),
+            trailing: _busy
+                ? const SizedBox(
+                    width: 16,
+                    height: 16,
+                    child: CircularProgressIndicator(strokeWidth: 2),
+                  )
+                : const Icon(Icons.refresh),
+            onTap: _busy ? null : _manualCheck,
           ),
           const Divider(),
           ListTile(
-            title: Text('Current Version'),
+            title: const Text('Current Version'),
             subtitle: Text(_update.currentVersion),
-            trailing: Icon(Icons.info_outline),
+            trailing: const Icon(Icons.info_outline),
           ),
           const Divider(),
           ListTile(
-            title: Text('About'),
-            subtitle: Text('Small School Management System\nFor schools with 100-150 students'),
+            title: const Text('About'),
+            subtitle: const Text(
+              'Small School Management System\nFor schools with 100-150 students',
+            ),
           ),
         ],
       ),

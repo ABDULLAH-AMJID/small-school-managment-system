@@ -1,6 +1,7 @@
 {
   "version": "1.0.1",
-  "notes": "Test data added - 40 students (Classes 1st-10th, Sections A & B) and 5 teachers added for testing. All features working: attendance, exams, timetable, marks, fees, report cards, weekly WhatsApp reports.",
+  "apkUrl": "https://github.com/ABDULLAH-AMJID/small-school-managment-system/blob/main/apk/school-management-v1.0.1-universal.apk?raw=true",
+  "notes": "Test data ab asal mein install hota hai: 5 teachers aur 40 students (Classes 1st-10th, Sections A & B). Purani install pe database upgrade hoti hai (DB v1 -> v2), is liye app ka data bhi mehfooz rehta hai. Update check ab asal version batata hai aur APK download page kholta hai.",
   "forced": false,
   "minVersion": "1.0.0"
 }

@@ -49,4 +49,4 @@ app.*.map.json
 
 # Built APKs: sirf release APK track hota hai, baqi local build outputs ignored
 /apk/*
-!/apk/school-management-v1.0.0-universal.apk
+!/apk/school-management-v1.0.1-universal.apk

@@ -1,7 +1,7 @@
 name: small_school_management
 description: A complete school management system for small schools - attendance, fees, timetable, exams, report cards, WhatsApp reports, and OTA updates.
 publish_to: 'none'
-version: 1.0.0+1
+version: 1.0.1+2
 
 environment:
   sdk: '>=3.0.0 <4.0.0'
@@ -23,6 +23,7 @@ dependencies:
   flutter_svg: ^2.0.9
   lottie: ^3.1.0
   http: ^1.2.2
+  package_info_plus: ^10.2.2
 
 dev_dependencies:
   flutter_test:

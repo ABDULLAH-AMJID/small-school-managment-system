@@ -1,71 +1,133 @@
 import 'dart:convert';
+
 import 'package:flutter/material.dart';
 import 'package:http/http.dart' as http;
+import 'package:package_info_plus/package_info_plus.dart';
+import 'package:url_launcher/url_launcher.dart';
 
-/// UpdateService manages over-the-air (OTA) updates using Shorebird.
+/// App update check.
 ///
-/// Shorebird checks for Dart code patches automatically on every app launch.
-/// When a patch is found, it downloads only the changed code (very small,
-/// typically a few KB), and applies it on the next app restart.
+/// HAQEEQAT (purane code mein yeh ghalat thi):
+/// Is app mein koi OTA / Shorebird patching MOJOOD NAHI hai. `shorebird init`
+/// kabhi run nahi hua, na `shorebird.yaml` hai na koi shorebird dependency.
+/// Purana update button sirf ek SnackBar dikhata tha ke patch restart pe lag
+/// jayega — woh message jhoot tha, asal mein kuch hota hi nahi tha.
 ///
-/// This service exposes:
-///  - [checkForUpdates]  -> manual update check (user taps "Check for Updates")
-///  - [currentVersion]   -> the installed app version
-///  - [autoUpdateEnabled] -> whether auto-update is on
+/// Ab yeh service:
+///   1. GitHub pe rakhe version.json se latest version check karti hai
+///   2. Installed version `package_info_plus` se leti hai (hardcode nahi)
+///   3. Update milne par browser mein APK download page khol deti hai — user
+///      APK install kare to naya version + naya data aa jata hai
 class UpdateService {
-  static const String _currentVersion = '1.0.0';
-  static const String _versionUrl = 'https://raw.githubusercontent.com/ABDULLAH-AMJID/small-school-managment-system/main/version.json';
+  static const String _versionUrl =
+      'https://raw.githubusercontent.com/ABDULLAH-AMJID/small-school-managment-system/main/version.json';
 
-  bool _autoUpdate = true;
+  /// Fallback, agar version.json mein `apkUrl` na ho.
+  static const String _defaultApkUrl =
+      'https://github.com/ABDULLAH-AMJID/small-school-managment-system/blob/main/apk/school-management-v1.0.1-universal.apk?raw=true';
+
+  String _currentVersion = '...';
   String? _latestVersion;
   String? _updateNotes;
+  String? _apkUrl;
+  bool autoUpdateEnabled = true;
   bool _checking = false;
+  String? _lastError;
 
-  bool get autoUpdateEnabled => _autoUpdate;
-  set autoUpdateEnabled(bool v) => _autoUpdate = v;
   String get currentVersion => _currentVersion;
   String? get latestVersion => _latestVersion;
   String? get updateNotes => _updateNotes;
+  String? get lastError => _lastError;
   bool get isChecking => _checking;
-  bool get updateAvailable =>
-      _latestVersion != null && _isNewer(_latestVersion!, _currentVersion);
 
-  /// Manual update check called when user taps "Check for Updates".
-  /// Returns true if an update is available.
-  Future<bool> checkForUpdates({bool silent = false}) async {
+  bool get updateAvailable =>
+      _latestVersion != null &&
+      isNewerVersion(_latestVersion!, _currentVersion);
+
+  /// Installed version asli package info se lo.
+  ///
+  /// BUG jo yahan fix hua: pehle version ek hardcoded constant tha (1.0.0).
+  /// Yaani 1.0.1 release karne ke baad bhi app khud ko purana samajhti, aur har
+  /// check pe "update available" kehti rehti — chahe update install ho chuka ho.
+  Future<void> init() async {
+    if (_currentVersion != '...') return;
+    try {
+      final info = await PackageInfo.fromPlatform();
+      _currentVersion = info.version;
+    } catch (e) {
+      _currentVersion = 'unknown';
+    }
+  }
+
+  /// GitHub se version.json fetch karke compare karta hai.
+  /// Returns true agar naya version available hai.
+  Future<bool> checkForUpdates() async {
     _checking = true;
+    _lastError = null;
     bool available = false;
     try {
-      // Try to fetch remote version.json from GitHub.
-      // If Shorebird is active, the engine handles the actual patch silently.
-      final response = await http.get(Uri.parse(_versionUrl)).timeout(const Duration(seconds: 8));
+      await init();
+      // Cache-buster: warna GitHub ka CDN purana version.json de sakta hai aur
+      // app ko update dikhta hi nahi.
+      final uri = Uri.parse(_versionUrl).replace(
+        queryParameters: {
+          't': DateTime.now().millisecondsSinceEpoch.toString()
+        },
+      );
+      final response = await http.get(uri, headers: {
+        'Cache-Control': 'no-cache'
+      }).timeout(const Duration(seconds: 10));
       if (response.statusCode == 200) {
-        final data = json.decode(response.body) as Map<String, dynamic>;
-        _latestVersion = data['version'] as String?;
-        _updateNotes = data['notes'] as String?;
-        if (_latestVersion != null && _isNewer(_latestVersion!, _currentVersion)) {
-          available = true;
+        final data = _decode(response.body);
+        if (data != null) {
+          _latestVersion = data['version'] as String?;
+          _updateNotes = data['notes'] as String?;
+          final url = data['apkUrl'] as String?;
+          _apkUrl = (url == null || url.isEmpty) ? _defaultApkUrl : url;
+          available = updateAvailable;
+        } else {
+          _lastError = 'version.json samajh nahi aaya';
         }
+      } else {
+        _lastError = 'Server ne ${response.statusCode} bheja';
       }
     } catch (e) {
-      // No network or GitHub unreachable — rely on Shorebird's built-in OTA.
-      debugPrint('Update check (remote) unavailable: $e');
+      _lastError = 'Internet ya GitHub tak rasai nahi: $e';
+    } finally {
+      _checking = false;
     }
-    _checking = false;
     return available;
   }
 
-  /// Auto-check on app launch. Non-blocking; results stored for UI.
-  Future<void> autoCheck() async {
-    if (!_autoUpdate) return;
-    await checkForUpdates(silent: true);
+  Map<String, dynamic>? _decode(String body) {
+    try {
+      final decoded = jsonDecode(body);
+      return decoded is Map<String, dynamic> ? decoded : null;
+    } catch (_) {
+      return null;
+    }
   }
 
-  bool _isNewer(String latest, String current) {
-    final l = latest.split('.').map(int.tryParse).map((e) => e ?? 0).toList();
-    final c = current.split('.').map(int.tryParse).map((e) => e ?? 0).toList();
+  /// Launch pe silent check (Settings khulne par bhi hota hai).
+  Future<void> autoCheck() async {
+    if (!autoUpdateEnabled) return;
+    await checkForUpdates();
+  }
+
+  /// 1.0.1 vs 1.0.10 jaisi comparisons sahi karta hai (string compare nahi).
+  /// Static + public is liye ke unit test ho sake.
+  static bool isNewerVersion(String latest, String current) {
+    List<int> parse(String v) => v
+        .split('+')
+        .first
+        .split('.')
+        .map((p) => int.tryParse(p.trim()) ?? 0)
+        .toList();
+
+    final l = parse(latest);
+    final c = parse(current);
     final len = l.length > c.length ? l.length : c.length;
-    for (int i = 0; i < len; i++) {
+    for (var i = 0; i < len; i++) {
       final lv = i < l.length ? l[i] : 0;
       final cv = i < c.length ? c[i] : 0;
       if (lv > cv) return true;
@@ -74,11 +136,29 @@ class UpdateService {
     return false;
   }
 
-  /// Trigger an update download + install (Shorebird patch). In production
-  /// Shorebird does this automatically; here we offer a manual restart prompt.
-  Future<void> applyUpdate(BuildContext context) async {
-    ScaffoldMessenger.of(context).showSnackBar(
-      const SnackBar(content: Text('Update checked. Shorebird will apply patches on next restart.')),
-    );
+  /// APK download page browser mein kholta hai.
+  ///
+  /// Purana code yahan sirf SnackBar dikhata tha aur kehta tha "next restart pe
+  /// update ho jayega" — magar koi patching hoti hi nahi thi. Ab user ko saaf
+  /// bataya jata hai ke APK download karke install karna hoga.
+  Future<bool> openDownloadPage(BuildContext context) async {
+    final uri = Uri.parse(_apkUrl ?? _defaultApkUrl);
+    try {
+      final ok = await launchUrl(uri, mode: LaunchMode.externalApplication);
+      if (!ok && context.mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+              content: Text('Browser nahi khul saka. Link: ${uri.toString()}')),
+        );
+      }
+      return ok;
+    } catch (e) {
+      if (context.mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text('Download page khulne mein masla: $e')),
+        );
+      }
+      return false;
+    }
   }
 }
