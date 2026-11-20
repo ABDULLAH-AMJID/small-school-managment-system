@@ -1,6 +1,6 @@
 {
-  "version": "1.0.0",
-  "notes": "Initial release - Small School Management System\nFeatures: attendance, exams, timetable, marks, fees, report cards, weekly WhatsApp reports, OTA updates.",
+  "version": "1.0.1",
+  "notes": "Test data added - 40 students (Classes 1st-10th, Sections A & B) and 5 teachers added for testing. All features working: attendance, exams, timetable, marks, fees, report cards, weekly WhatsApp reports.",
   "forced": false,
   "minVersion": "1.0.0"
 }
