@@ -37,21 +37,29 @@ class _WeeklyReportScreenState extends State<WeeklyReportScreen> {
 
   Future<void> _load() async {
     final s = await _db.getStudents();
-    setState(() { _students = s; _loading = false; });
+    setState(() {
+      _students = s;
+      _loading = false;
+    });
   }
 
   Future<void> _calc() async {
     if (_selected == null) return;
     final stats = await _db.attendanceStatsForStudent(_selected!.id!);
-    final total = (stats['Present'] ?? 0) + (stats['Absent'] ?? 0) + (stats['Leave'] ?? 0);
+    final total = (stats['Present'] ?? 0) +
+        (stats['Absent'] ?? 0) +
+        (stats['Leave'] ?? 0);
     setState(() {
       _present = stats['Present'] ?? 0;
       _absent = stats['Absent'] ?? 0;
       _attPct = total == 0 ? 0 : (_present / total) * 100;
     });
-    final fees = await _db.getFees(studentId: _selected!.id!, status: 'Pending');
-    _feeBal = fees.fold(0, (sum, f) => sum + f.balance);
-    _feeLast = fees.isNotEmpty ? fees.first.dueDate : '-';
+    // Fee ka hisaab fee_payments (v1.1.0) se — purani fees table se nahi.
+    final ledger = await _db.feeLedgerFor(_selected!);
+    _feeBal = ledger.totalBalance;
+    _feeLast = ledger.pendingMonths.isEmpty
+        ? '-'
+        : FeeLedger.monthLabel(ledger.pendingMonths.last);
   }
 
   Future<void> _sendWeekly() async {
@@ -59,54 +67,92 @@ class _WeeklyReportScreenState extends State<WeeklyReportScreen> {
     setState(() => _saving = true);
     await _calc();
     await _db.insertWeeklyReport(WeeklyReport(
-      studentId: _selected!.id!, weekStart: _weekStart,
-      attendancePercent: _attPct, presentDays: _present, absentDays: _absent,
-      homeworkStatus: _hwStatus, teacherComment: _commentC.text,
-      feeBalance: _feeBal, feeLastDate: _feeLast,
+      studentId: _selected!.id!,
+      weekStart: _weekStart,
+      attendancePercent: _attPct,
+      presentDays: _present,
+      absentDays: _absent,
+      homeworkStatus: _hwStatus,
+      teacherComment: _commentC.text,
+      feeBalance: _feeBal,
+      feeLastDate: _feeLast,
     ));
     final pdf = await PdfService.generateWeeklyReport(
-      student: _selected!, attendancePercent: _attPct, presentDays: _present,
-      absentDays: _absent, homeworkStatus: _hwStatus, teacherComment: _commentC.text,
-      feeBalance: _feeBal, feeLastDate: _feeLast, weekStart: _weekStart,
+      student: _selected!,
+      attendancePercent: _attPct,
+      presentDays: _present,
+      absentDays: _absent,
+      homeworkStatus: _hwStatus,
+      teacherComment: _commentC.text,
+      feeBalance: _feeBal,
+      feeLastDate: _feeLast,
+      weekStart: _weekStart,
     );
-    await WhatsAppService.sendReportPdf(context, parentPhone: _selected!.parentPhone, studentName: _selected!.name, pdfFile: pdf, comment: _commentC.text);
+    await WhatsAppService.sendReportPdf(context,
+        parentPhone: _selected!.parentPhone,
+        studentName: _selected!.name,
+        pdfFile: pdf,
+        comment: _commentC.text);
     setState(() => _saving = false);
-    if (mounted) ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('Weekly report sent to parent via WhatsApp!')));
+    if (mounted)
+      ScaffoldMessenger.of(context).showSnackBar(const SnackBar(
+          content: Text('Weekly report sent to parent via WhatsApp!')));
   }
 
   @override
   Widget build(BuildContext context) {
     return Scaffold(
-      appBar: AppBar(title: Text('Weekly Report to Parents'), leading: const BackButton()),
+      appBar: AppBar(
+          title: Text('Weekly Report to Parents'), leading: const BackButton()),
       body: Column(
         children: [
           Padding(
             padding: const EdgeInsets.all(10),
-            child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+            child:
+                Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
               Row(children: [
-                Expanded(flex: 2, child: DropdownButton<Student>(
-                  value: _selected,
-                  hint: Text('Select Student'),
-                  items: _students.map((s) => DropdownMenuItem(value: s, child: Text('${s.name} (${s.rollNo})'))).toList(),
-                  onChanged: (v) => setState(() => _selected = v),
-                  isExpanded: true,
-                )),
+                Expanded(
+                    flex: 2,
+                    child: DropdownButton<Student>(
+                      value: _selected,
+                      hint: Text('Select Student'),
+                      items: _students
+                          .map((s) => DropdownMenuItem(
+                              value: s, child: Text('${s.name} (${s.rollNo})')))
+                          .toList(),
+                      onChanged: (v) => setState(() => _selected = v),
+                      isExpanded: true,
+                    )),
                 const SizedBox(width: 8),
-                Expanded(child: TextField(controller: _commentC, decoration: const InputDecoration(labelText: 'Teacher Comment', isDense: true, contentPadding: EdgeInsets.symmetric(vertical: 10, horizontal: 10)))),
+                Expanded(
+                    child: TextField(
+                        controller: _commentC,
+                        decoration: const InputDecoration(
+                            labelText: 'Teacher Comment',
+                            isDense: true,
+                            contentPadding: EdgeInsets.symmetric(
+                                vertical: 10, horizontal: 10)))),
               ]),
               const SizedBox(height: 10),
               Row(children: [
-                Expanded(child: TextField(
+                Expanded(
+                    child: TextField(
                   controller: TextEditingController(text: _weekStart),
                   readOnly: true,
-                  decoration: const InputDecoration(labelText: 'Week Start', isDense: true, contentPadding: EdgeInsets.symmetric(vertical: 10, horizontal: 10)),
+                  decoration: const InputDecoration(
+                      labelText: 'Week Start',
+                      isDense: true,
+                      contentPadding:
+                          EdgeInsets.symmetric(vertical: 10, horizontal: 10)),
                 )),
                 const SizedBox(width: 8),
-                Expanded(child: DropdownButton<String>(
+                Expanded(
+                    child: DropdownButton<String>(
                   value: _hwStatus,
                   items: const [
                     DropdownMenuItem(value: 'Done', child: Text('Done')),
-                    DropdownMenuItem(value: 'Not Done', child: Text('Not Done')),
+                    DropdownMenuItem(
+                        value: 'Not Done', child: Text('Not Done')),
                     DropdownMenuItem(value: 'Pending', child: Text('Pending')),
                   ],
                   onChanged: (v) => setState(() => _hwStatus = v ?? 'Done'),
@@ -114,29 +160,41 @@ class _WeeklyReportScreenState extends State<WeeklyReportScreen> {
               ]),
               const SizedBox(height: 10),
               Row(children: [
-                Expanded(child: ElevatedButton(onPressed: _calc, child: Text('Calculate Attendance & Fee'))),
+                Expanded(
+                    child: ElevatedButton(
+                        onPressed: _calc,
+                        child: Text('Calculate Attendance & Fee'))),
                 const SizedBox(width: 8),
-                Expanded(child: ElevatedButton(onPressed: _saving ? null : _sendWeekly, child: Text('Send PDF to Parent via WhatsApp'))),
+                Expanded(
+                    child: ElevatedButton(
+                        onPressed: _saving ? null : _sendWeekly,
+                        child: Text('Send PDF to Parent via WhatsApp'))),
               ]),
               if (_selected != null) ...[
                 const SizedBox(height: 12),
-                Card(child: Padding(
+                Card(
+                    child: Padding(
                   padding: const EdgeInsets.all(12),
                   child: Column(children: [
                     Text('Weekly Summary', style: AppTheme.subHeading),
-                    Text('Attendance: ${_attPct.toStringAsFixed(1)}%  (Present: $_present, Absent: $_absent)', style: AppTheme.body),
+                    Text(
+                        'Attendance: ${_attPct.toStringAsFixed(1)}%  (Present: $_present, Absent: $_absent)',
+                        style: AppTheme.body),
                     Text('Homework: $_hwStatus', style: AppTheme.body),
-                    Text('Fee Balance: Rs ${_feeBal.toStringAsFixed(0)}', style: AppTheme.body),
+                    Text('Fee Balance: Rs ${_feeBal.toStringAsFixed(0)}',
+                        style: AppTheme.body),
                     Text('Last Date: $_feeLast', style: AppTheme.body),
                   ]),
                 )),
               ],
             ]),
           ),
-          if (_loading) const Expanded(child: Center(child: CircularProgressIndicator())),
+          if (_loading)
+            const Expanded(child: Center(child: CircularProgressIndicator())),
         ],
       ),
-      floatingActionButton: FloatingActionButton(onPressed: () {}, child: Icon(Icons.add)),
+      floatingActionButton:
+          FloatingActionButton(onPressed: () {}, child: Icon(Icons.add)),
     );
   }
 }

@@ -22,7 +22,9 @@ class _LoginScreenState extends State<LoginScreen> {
     setState(() => _loading = false);
     if (user == null) {
       ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text('Invalid username or password'), backgroundColor: AppTheme.danger),
+        const SnackBar(
+            content: Text('Invalid username or password'),
+            backgroundColor: AppTheme.danger),
       );
       return;
     }
@@ -44,18 +46,34 @@ class _LoginScreenState extends State<LoginScreen> {
               children: [
                 Icon(Icons.school, size: 70, color: AppTheme.primary),
                 const SizedBox(height: 16),
-                Text('School Management', style: AppTheme.heading.copyWith(fontSize: 24)),
+                Text('School Management',
+                    style: AppTheme.heading.copyWith(fontSize: 24)),
                 const SizedBox(height: 8),
-                Text('Chote school ka complete system', style: AppTheme.caption),
+                Text('Chote school ka complete system',
+                    style: AppTheme.caption),
                 const SizedBox(height: 32),
-                TextField(controller: _user, decoration: const InputDecoration(labelText: 'Username', prefixIcon: Icon(Icons.person))),
+                TextField(
+                    controller: _user,
+                    decoration: const InputDecoration(
+                        labelText: 'Username', prefixIcon: Icon(Icons.person))),
                 const SizedBox(height: 16),
-                TextField(controller: _pass, decoration: const InputDecoration(labelText: 'Password', prefixIcon: Icon(Icons.lock)), obscureText: true),
+                TextField(
+                    controller: _pass,
+                    decoration: const InputDecoration(
+                        labelText: 'Password', prefixIcon: Icon(Icons.lock)),
+                    obscureText: true),
                 const SizedBox(height: 24),
                 SizedBox(
                   width: double.infinity,
                   height: 50,
-                  child: ElevatedButton(onPressed: _loading ? null : _login, child: _loading ? const SizedBox(width: 20, height: 20, child: CircularProgressIndicator(strokeWidth: 2)) : Text('Login')),
+                  child: ElevatedButton(
+                      onPressed: _loading ? null : _login,
+                      child: _loading
+                          ? const SizedBox(
+                              width: 20,
+                              height: 20,
+                              child: CircularProgressIndicator(strokeWidth: 2))
+                          : Text('Login')),
                 ),
                 const SizedBox(height: 16),
                 Text('Default: admin / admin123', style: AppTheme.caption),

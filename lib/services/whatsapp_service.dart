@@ -17,7 +17,8 @@ class WhatsAppService {
   }
 
   /// Send a weekly report PDF to a parent via WhatsApp share sheet.
-  static Future<bool> sendReportPdf(BuildContext context, {
+  static Future<bool> sendReportPdf(
+    BuildContext context, {
     required String parentPhone,
     required String studentName,
     required File pdfFile,

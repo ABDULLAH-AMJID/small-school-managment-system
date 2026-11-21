@@ -18,7 +18,7 @@ class DatabaseHelper {
   /// DB schema/data version.
   /// 1 = initial release (v1.0.0)
   /// 2 = test data seed: 5 teachers + 40 students (v1.0.1)
-  static const int _dbVersion = 2;
+  static const int _dbVersion = 3;
 
   Future<Database> _initDb() async {
     final dir = await getApplicationDocumentsDirectory();
@@ -60,7 +60,8 @@ class DatabaseHelper {
         address TEXT,
         admission_date TEXT,
         photo_path TEXT,
-        is_active INTEGER NOT NULL DEFAULT 1
+        is_active INTEGER NOT NULL DEFAULT 1,
+        fee_start_month TEXT
       )
     ''');
     // Teachers
@@ -103,7 +104,8 @@ class DatabaseHelper {
         name TEXT NOT NULL,
         class_name TEXT,
         start_date TEXT,
-        end_date TEXT
+        end_date TEXT,
+        exam_type TEXT DEFAULT 'Mid Term'
       )
     ''');
     // Timetable
@@ -169,9 +171,75 @@ class DatabaseHelper {
       )
     ''');
 
+    await _createV3Tables(db);
+
     await _seedUsers(db);
     await _seedTeachers(db);
     await _seedStudents(db);
+    await _seedClasses(db);
+  }
+
+  /// v3 ki nayi tables. onCreate aur onUpgrade dono se call hota hai, aur
+  /// `IF NOT EXISTS` ki wajah se dobara chalana mehfooz hai.
+  Future<void> _createV3Tables(Database db) async {
+    // Class settings: har class ki monthly fee.
+    await db.execute('''
+      CREATE TABLE IF NOT EXISTS classes(
+        id INTEGER PRIMARY KEY AUTOINCREMENT,
+        name TEXT UNIQUE NOT NULL,
+        monthly_fee REAL NOT NULL DEFAULT 0,
+        is_active INTEGER NOT NULL DEFAULT 1
+      )
+    ''');
+
+    // Har class ke subjects aur unke marks totals (exam type ke hisaab se).
+    await db.execute('''
+      CREATE TABLE IF NOT EXISTS class_subjects(
+        id INTEGER PRIMARY KEY AUTOINCREMENT,
+        class_name TEXT NOT NULL,
+        subject TEXT NOT NULL,
+        total_marks REAL NOT NULL DEFAULT 100,
+        mid_marks REAL NOT NULL DEFAULT 0,
+        final_marks REAL NOT NULL DEFAULT 0,
+        weekly_marks REAL NOT NULL DEFAULT 0,
+        monthly_marks REAL NOT NULL DEFAULT 0,
+        sort_order INTEGER NOT NULL DEFAULT 0,
+        UNIQUE(class_name, subject)
+      )
+    ''');
+
+    // Exam banate waqt chune gaye subjects.
+    await db.execute('''
+      CREATE TABLE IF NOT EXISTS exam_subjects(
+        id INTEGER PRIMARY KEY AUTOINCREMENT,
+        exam_id INTEGER NOT NULL,
+        subject TEXT NOT NULL,
+        total_marks REAL NOT NULL DEFAULT 100,
+        UNIQUE(exam_id, subject)
+      )
+    ''');
+
+    // Fee ki har adaiigi (receipt). Ek month ke against kitni bhi payments —
+    // isi se installments banti hain.
+    await db.execute('''
+      CREATE TABLE IF NOT EXISTS fee_payments(
+        id INTEGER PRIMARY KEY AUTOINCREMENT,
+        student_id INTEGER NOT NULL,
+        month TEXT NOT NULL,
+        amount REAL NOT NULL DEFAULT 0,
+        paid_date TEXT,
+        note TEXT
+      )
+    ''');
+
+    await db.execute(
+        'CREATE INDEX IF NOT EXISTS idx_class_subjects_class ON class_subjects(class_name)');
+    await db.execute(
+        'CREATE INDEX IF NOT EXISTS idx_exam_subjects_exam ON exam_subjects(exam_id)');
+    await db.execute(
+        'CREATE INDEX IF NOT EXISTS idx_fee_payments_student ON fee_payments(student_id, month)');
+    await db.execute(
+        'CREATE INDEX IF NOT EXISTS idx_marks_student_exam ON marks(student_id, exam_id)');
   }
 
   /// Purani install (DB v1) pe chalta hai.
@@ -182,6 +250,79 @@ class DatabaseHelper {
     if (oldVersion < 2) {
       await _seedTeachers(db);
       await _seedStudents(db);
+    }
+    if (oldVersion < 3) {
+      await _migrateToV3(db);
+    }
+  }
+
+  /// v2 -> v3: class settings, exam subjects, fee payments (installments).
+  Future<void> _migrateToV3(Database db) async {
+    await _createV3Tables(db);
+
+    // exams mein exam_type column (purane exams ko 'Mid Term' default).
+    if (!await _hasColumn(db, 'exams', 'exam_type')) {
+      await db.execute(
+          "ALTER TABLE exams ADD COLUMN exam_type TEXT DEFAULT 'Mid Term'");
+    }
+
+    // students mein fee_start_month — user ki pasand ke mutabiq purane students
+    // ka fee hisaab IS mahine se shuru hoga, admission date se backfill nahi.
+    if (!await _hasColumn(db, 'students', 'fee_start_month')) {
+      await db.execute('ALTER TABLE students ADD COLUMN fee_start_month TEXT');
+      final now = DateTime.now();
+      final thisMonth = '${now.year}-${now.month.toString().padLeft(2, '0')}';
+      await db.update('students', {'fee_start_month': thisMonth});
+    }
+
+    // Purani `fees` table ki jama shuda raqam nayi `fee_payments` mein le jao,
+    // warna purana record ghayab ho jata.
+    final existing = Sqflite.firstIntValue(
+        await db.rawQuery('SELECT COUNT(*) FROM fee_payments'));
+    if (existing == 0) {
+      await db.execute('''
+        INSERT INTO fee_payments (student_id, month, amount, paid_date, note)
+        SELECT student_id, month, amount_paid,
+               COALESCE(paid_date, ''), 'Purane record se migrate hua'
+        FROM fees
+        WHERE amount_paid > 0
+      ''');
+    }
+
+    await _seedClasses(db);
+  }
+
+  Future<bool> _hasColumn(Database db, String table, String column) async {
+    final info = await db.rawQuery('PRAGMA table_info($table)');
+    return info.any((r) => r['name'] == column);
+  }
+
+  /// 1st - 10th classes. Fee aur subjects JAAN BOOJH kar khaali chhore gaye
+  /// hain — user Class tab mein khud bhare ga.
+  Future<void> _seedClasses(Database db) async {
+    final n = Sqflite.firstIntValue(
+        await db.rawQuery('SELECT COUNT(*) FROM classes'));
+    if (n != null && n > 0) return;
+    const names = [
+      'Nursery',
+      'KG',
+      '1st',
+      '2nd',
+      '3rd',
+      '4th',
+      '5th',
+      '6th',
+      '7th',
+      '8th',
+      '9th',
+      '10th',
+    ];
+    for (var i = 0; i < names.length; i++) {
+      await db.insert('classes', {
+        'name': names[i],
+        'monthly_fee': 0,
+        'is_active': 1,
+      });
     }
   }
 
@@ -757,7 +898,18 @@ class DatabaseHelper {
     return rows.map(Student.fromMap).toList();
   }
 
-  Future<int> insertStudent(Student s) => insert('students', s.toMap());
+  /// Naya student. `fee_start_month` khaali ho to admission month (ya aaj ka
+  /// month) set ho jata hai, taake fee ka hisaab foran shuru ho jaye.
+  Future<int> insertStudent(Student s) {
+    var data = s.toMap();
+    if ((data['fee_start_month'] as String?)?.isEmpty ?? true) {
+      final adm = s.admissionDate;
+      data['fee_start_month'] =
+          adm.length >= 7 ? adm.substring(0, 7) : FeeLedger.currentMonth();
+    }
+    return insert('students', data);
+  }
+
   Future<int> updateStudent(Student s) =>
       update('students', s.toMap(), 'id = ?', [s.id]);
   Future<int> deleteStudent(int id) => delete('students', 'id = ?', [id]);
@@ -766,11 +918,23 @@ class DatabaseHelper {
     return rows.isNotEmpty ? Student.fromMap(rows.first) : null;
   }
 
+  /// Dropdown ke liye class names — `classes` table AUR students ki asal
+  /// classes dono ka union (taake purane students ki class kahin ghayab na ho).
   Future<List<String>> getClasses() async {
     final d = await db;
-    final rows = await d.rawQuery(
-        "SELECT DISTINCT class_name FROM students WHERE is_active = 1 ORDER BY class_name");
-    return rows.map((r) => r['class_name'] as String).toList();
+    final fromStudents = await d.rawQuery(
+        "SELECT DISTINCT class_name FROM students WHERE is_active = 1 AND class_name IS NOT NULL AND class_name <> ''");
+    final fromTable = await d.query('classes', columns: ['name']);
+    final names = <String>{
+      for (final r in fromStudents) r['class_name'] as String,
+      for (final r in fromTable) r['name'] as String,
+    }..removeWhere((n) => n.trim().isEmpty);
+    final list = names.toList()
+      ..sort((a, b) {
+        final r = classRank(a).compareTo(classRank(b));
+        return r != 0 ? r : a.compareTo(b);
+      });
+    return list;
   }
 
   // ============ TEACHERS ============
@@ -956,6 +1120,215 @@ class DatabaseHelper {
     final rows = await query('weekly_reports',
         where: where, whereArgs: args, orderBy: 'week_start DESC');
     return rows.map(WeeklyReport.fromMap).toList();
+  }
+
+  // ============ CLASS SETTINGS (v3) ============
+
+  /// Classes ki tarteeb: Nursery, KG, 1st ... 10th, phir baaki alphabetic.
+  static const List<String> _classOrder = [
+    'Nursery',
+    'KG',
+    '1st',
+    '2nd',
+    '3rd',
+    '4th',
+    '5th',
+    '6th',
+    '7th',
+    '8th',
+    '9th',
+    '10th',
+  ];
+
+  static int classRank(String name) {
+    final i = _classOrder.indexOf(name);
+    return i == -1 ? _classOrder.length : i;
+  }
+
+  Future<List<SchoolClass>> getSchoolClasses({bool activeOnly = true}) async {
+    final d = await db;
+    final rows = await d.query('classes',
+        where: activeOnly ? 'is_active = 1' : null, orderBy: 'id ASC');
+    final list = rows.map(SchoolClass.fromMap).toList();
+    list.sort((a, b) {
+      final r = classRank(a.name).compareTo(classRank(b.name));
+      return r != 0 ? r : a.name.compareTo(b.name);
+    });
+    return list;
+  }
+
+  Future<SchoolClass?> getSchoolClassByName(String name) async {
+    final d = await db;
+    final rows = await d.query('classes',
+        where: 'name = ?', whereArgs: [name], limit: 1);
+    if (rows.isEmpty) return null;
+    return SchoolClass.fromMap(rows.first);
+  }
+
+  /// Class ka naam aur uski monthly fee ka map (fee hisaab ke liye).
+  Future<Map<String, double>> getMonthlyFees() async {
+    final d = await db;
+    final rows = await d.query('classes', columns: ['name', 'monthly_fee']);
+    return {
+      for (final r in rows)
+        r['name'] as String: ((r['monthly_fee'] ?? 0) as num).toDouble(),
+    };
+  }
+
+  Future<int> insertClass(SchoolClass c) async {
+    final d = await db;
+    return d.insert('classes', c.toMap()..remove('id'),
+        conflictAlgorithm: ConflictAlgorithm.replace);
+  }
+
+  Future<int> updateClass(SchoolClass c) =>
+      update('classes', c.toMap(), 'id = ?', [c.id]);
+
+  Future<int> deleteClass(int id) => delete('classes', 'id = ?', [id]);
+
+  Future<List<ClassSubject>> getClassSubjects(String className) async {
+    final d = await db;
+    final rows = await d.query('class_subjects',
+        where: 'class_name = ?',
+        whereArgs: [className],
+        orderBy: 'sort_order ASC, subject ASC');
+    return rows.map(ClassSubject.fromMap).toList();
+  }
+
+  Future<int> upsertClassSubject(ClassSubject s) async {
+    final d = await db;
+    return d.insert('class_subjects', s.toMap()..remove('id'),
+        conflictAlgorithm: ConflictAlgorithm.replace);
+  }
+
+  Future<int> deleteClassSubject(int id) =>
+      delete('class_subjects', 'id = ?', [id]);
+
+  // ============ EXAM SUBJECTS (v3) ============
+
+  Future<List<ExamSubject>> getExamSubjects(int examId) async {
+    final d = await db;
+    final rows = await d.query('exam_subjects',
+        where: 'exam_id = ?', whereArgs: [examId], orderBy: 'id ASC');
+    return rows.map(ExamSubject.fromMap).toList();
+  }
+
+  /// Exam ke subjects poori tarah replace kar deta hai (transaction mein).
+  Future<void> replaceExamSubjects(int examId, List<ExamSubject> list) async {
+    final d = await db;
+    await d.transaction((txn) async {
+      await txn
+          .delete('exam_subjects', where: 'exam_id = ?', whereArgs: [examId]);
+      for (final s in list) {
+        await txn.insert('exam_subjects', {
+          'exam_id': examId,
+          'subject': s.subject,
+          'total_marks': s.totalMarks,
+        });
+      }
+    });
+  }
+
+  Future<int> deleteExamSubjectsForExam(int examId) =>
+      delete('exam_subjects', 'exam_id = ?', [examId]);
+
+  // ============ MARKS (upsert) ============
+
+  /// Mark save karta hai — agar us student/exam/subject ka record pehle se hai
+  /// to UPDATE, warna INSERT. (Pehle sirf insert tha, is liye dobara save
+  /// karne pe duplicate rows ban jati thin.)
+  Future<void> upsertMark(Mark m) async {
+    final d = await db;
+    final existing = await d.query('marks',
+        where: 'student_id = ? AND exam_id = ? AND subject = ?',
+        whereArgs: [m.studentId, m.examId, m.subject],
+        limit: 1);
+    if (existing.isEmpty) {
+      await d.insert('marks', m.toMap()..remove('id'));
+    } else {
+      await d.update(
+        'marks',
+        {'marks_obtained': m.marksObtained, 'total_marks': m.totalMarks},
+        where: 'id = ?',
+        whereArgs: [existing.first['id']],
+      );
+    }
+  }
+
+  /// Ek exam ke tamam students ke marks (ek hi query mein) — list screen pe
+  /// "kitne subjects ke marks bhare gaye" dikhane ke liye.
+  Future<Map<int, List<Mark>>> getMarksByStudentForExam(int examId) async {
+    final d = await db;
+    final rows =
+        await d.query('marks', where: 'exam_id = ?', whereArgs: [examId]);
+    final out = <int, List<Mark>>{};
+    for (final r in rows) {
+      final m = Mark.fromMap(r);
+      out.putIfAbsent(m.studentId, () => []).add(m);
+    }
+    return out;
+  }
+
+  /// Exam ke marks delete (student/exam ke liye).
+  Future<int> deleteMarks({required int studentId, required int examId}) =>
+      delete('marks', 'student_id = ? AND exam_id = ?', [studentId, examId]);
+
+  // ============ FEE PAYMENTS + LEDGER (v3) ============
+
+  Future<List<FeePayment>> getFeePayments(int studentId) async {
+    final d = await db;
+    final rows = await d.query('fee_payments',
+        where: 'student_id = ?',
+        whereArgs: [studentId],
+        orderBy: 'month ASC, id ASC');
+    return rows.map(FeePayment.fromMap).toList();
+  }
+
+  Future<int> insertFeePayment(FeePayment p) async {
+    final d = await db;
+    return d.insert('fee_payments', p.toMap()..remove('id'));
+  }
+
+  Future<int> deleteFeePayment(int id) =>
+      delete('fee_payments', 'id = ?', [id]);
+
+  /// Kisi student ka poora fee hisaab.
+  ///
+  /// [feeOverride] diya jaye to class ki fee ke bajaye woh istemaal hoti hai
+  /// (individual concession ke liye).
+  Future<FeeLedger> feeLedgerFor(Student s, {double? feeOverride}) async {
+    final monthly = feeOverride ??
+        (await getSchoolClassByName(s.className))?.monthlyFee ??
+        0;
+    final payments = await getFeePayments(s.id ?? 0);
+    final byMonth = <String, double>{};
+    for (final p in payments) {
+      byMonth[p.month] = (byMonth[p.month] ?? 0) + p.amount;
+    }
+
+    final start = s.feeStartMonth.isNotEmpty
+        ? s.feeStartMonth
+        : (s.admissionDate.length >= 7
+            ? s.admissionDate.substring(0, 7)
+            : FeeLedger.currentMonth());
+    final now = FeeLedger.currentMonth();
+    var months = FeeLedger.monthsBetween(start, now);
+
+    // Agar start month future mein hai (ghalti se), to khali list.
+    if (months.isEmpty) months = [];
+
+    return FeeLedger(monthlyFee: monthly, months: months, payments: byMonth);
+  }
+
+  /// Naam ya roll number se student dhundo (fee screen ki search).
+  Future<List<Student>> searchStudents(String q) async {
+    final d = await db;
+    final like = '%$q%';
+    final rows = await d.query('students',
+        where: 'is_active = 1 AND (name LIKE ? OR roll_no LIKE ?)',
+        whereArgs: [like, like],
+        orderBy: 'name ASC');
+    return rows.map(Student.fromMap).toList();
   }
 
   Future<void> close() async {

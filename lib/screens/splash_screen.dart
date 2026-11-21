@@ -16,6 +16,7 @@ class _SplashScreenState extends State<SplashScreen> {
       if (mounted) Navigator.pushReplacementNamed(context, '/login');
     });
   }
+
   @override
   Widget build(BuildContext context) {
     return Scaffold(
@@ -26,9 +27,12 @@ class _SplashScreenState extends State<SplashScreen> {
           children: [
             Icon(Icons.school, size: 80, color: Colors.white),
             const SizedBox(height: 16),
-            Text('School Management', style: AppTheme.heading.copyWith(color: Colors.white, fontSize: 26)),
+            Text('School Management',
+                style: AppTheme.heading
+                    .copyWith(color: Colors.white, fontSize: 26)),
             const SizedBox(height: 8),
-            Text('Small School System', style: AppTheme.body.copyWith(color: Colors.white70)),
+            Text('Small School System',
+                style: AppTheme.body.copyWith(color: Colors.white70)),
             const SizedBox(height: 30),
             const CircularProgressIndicator(color: Colors.white),
           ],

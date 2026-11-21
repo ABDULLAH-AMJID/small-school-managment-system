@@ -1,7 +1,9 @@
 {
-  "version": "1.0.1",
-  "apkUrl": "https://github.com/ABDULLAH-AMJID/small-school-managment-system/blob/main/apk/school-management-v1.0.1-universal.apk?raw=true",
-  "notes": "Test data ab asal mein install hota hai: 5 teachers aur 40 students (Classes 1st-10th, Sections A & B). Purani install pe database upgrade hoti hai (DB v1 -> v2), is liye app ka data bhi mehfooz rehta hai. Update check ab asal version batata hai aur APK download page kholta hai.",
+  "version": "1.1.0",
+  "apkUrl": "https://github.com/ABDULLAH-AMJID/small-school-managment-system/blob/main/apk/school-management-v1.1.0-universal.apk?raw=true",
   "forced": false,
-  "minVersion": "1.0.0"
+  "minVersion": "1.0.0",
+  "releaseDate": "2026-11-20",
+  "releaseNotes": "v1.1.0: Bara update — (1) Students aur Teachers mein edit kaam karta hai. (2) Naya Classes tab: har class ki monthly fee, subjects, aur har subject ke mid/final/weekly/monthly marks. (3) Exam banate waqt dates calendar se select ya type kar sakte hain (start date = aaj), exam type aur subjects select hote hain. (4) Marks entry naye flow ke sath: Class → Exam → Student → us ke tamam subjects ek screen pe. (5) Fee tab: naam/roll no se search, class ke hisaab se auto fee, month-by-month arrears aur installments.",
+  "sha256": "a524c6ed70d21f8e06f1d439f90883e3fe70711ce4bd8cd84d04804a80217ac5"
 }

@@ -68,8 +68,14 @@ void main() {
     // purani install pe seed data kabhi nahi aata.
     final src = File('lib/db/database_helper.dart').readAsStringSync();
 
-    test('DB version 2 pe hai (1 pe nahi)', () {
-      expect(src, contains('static const int _dbVersion = 2;'));
+    test(
+        'DB version 1 pe nahi atka (kam az kam 2, migration ke sath barhta rahe)',
+        () {
+      // Version number parse karke dekhte hain taake har bump pe test dobara
+      // na likhna pare — asal bug yeh tha ke version 1 pe atka tha.
+      final m = RegExp(r'static const int _dbVersion = (\d+);').firstMatch(src);
+      expect(m, isNotNull, reason: '_dbVersion declaration milni chahiye');
+      expect(int.parse(m!.group(1)!), greaterThanOrEqualTo(2));
       expect(src, isNot(contains('version: 1,')));
     });
 
@@ -105,10 +111,39 @@ void main() {
         5,
         reason: '5 teachers hone chahiye',
       );
+      // dart format students ke maps ko multi-line kar sakta hai, is liye line
+      // layout pe depend nahi karte. Har student ka roll_no unique hai aur
+      // insert-mapping mein koi literal roll_no value nahi hoti (wahan
+      // s['roll_no'] likha hai), is liye UNIQUE roll_no values ginna
+      // layout-proof hai.
+      final rollNos = RegExp(r"'roll_no':\s*'([0-9]+)'")
+          .allMatches(src)
+          .map((m) => m.group(1))
+          .toSet();
+      expect(rollNos.length, 40, reason: '40 unique roll numbers hone chahiye');
+    });
+  });
+
+  group('UpdateService.apkFileName', () {
+    test('version se safe filename banata hai', () {
       expect(
-        RegExp(r"^\s+\{'name':", multiLine: true).allMatches(src).length,
-        40,
-        reason: '40 students hone chahiye',
+        UpdateService.apkFileName('1.0.2'),
+        'school-management-v1.0.2-universal.apk',
+      );
+    });
+
+    test('khatarnak / ajeeb characters replace ho jate hain', () {
+      final name = UpdateService.apkFileName('1.0/2 a\\b:c*d?e<f>g|h');
+      expect(name, isNot(contains('/')));
+      expect(name, isNot(contains(' ')));
+      expect(name, endsWith('.apk'));
+      expect(name, startsWith('school-management-v'));
+    });
+
+    test('build number (+3) filename mein safe rehta hai', () {
+      expect(
+        UpdateService.apkFileName('1.0.2+3'),
+        'school-management-v1.0.2_3-universal.apk',
       );
     });
   });
@@ -131,9 +166,18 @@ void main() {
       expect(src, isNot(contains('applyUpdate')));
     });
 
-    test('APK download page kholne ka rasta hai', () {
+    test('APK download page kholne ka rasta hai (fallback)', () {
       expect(src, contains('openDownloadPage'));
       expect(src, contains('launchUrl'));
+    });
+
+    test('in-app download + sha256 verification maujood hai', () {
+      expect(src, contains('downloadApk'));
+      expect(src, contains("import 'package:dio/dio.dart';"));
+      expect(src, contains("import 'package:crypto/crypto.dart';"));
+      expect(src, contains('sha256'));
+      // Adhoori download mukammal APK na ban jaye.
+      expect(src, contains('.part'));
     });
   });
 }

@@ -1,44 +1,55 @@
 import 'dart:convert';
+import 'dart:io';
 
+import 'package:crypto/crypto.dart';
+import 'package:dio/dio.dart';
 import 'package:flutter/material.dart';
 import 'package:http/http.dart' as http;
 import 'package:package_info_plus/package_info_plus.dart';
+import 'package:path/path.dart' as p;
+import 'package:path_provider/path_provider.dart';
 import 'package:url_launcher/url_launcher.dart';
 
-/// App update check.
+/// App update: check, download aur install.
 ///
 /// HAQEEQAT (purane code mein yeh ghalat thi):
-/// Is app mein koi OTA / Shorebird patching MOJOOD NAHI hai. `shorebird init`
-/// kabhi run nahi hua, na `shorebird.yaml` hai na koi shorebird dependency.
-/// Purana update button sirf ek SnackBar dikhata tha ke patch restart pe lag
-/// jayega — woh message jhoot tha, asal mein kuch hota hi nahi tha.
+/// Is app mein koi Shorebird OTA patching MOJOOD NAHI hai — na `shorebird.yaml`
+/// hai na koi shorebird dependency. Purana update button sirf SnackBar dikhata
+/// tha ke patch restart pe lag jayega; woh message jhoot tha.
 ///
 /// Ab yeh service:
 ///   1. GitHub pe rakhe version.json se latest version check karti hai
 ///   2. Installed version `package_info_plus` se leti hai (hardcode nahi)
-///   3. Update milne par browser mein APK download page khol deti hai — user
-///      APK install kare to naya version + naya data aa jata hai
+///   3. Nayi APK app ke andar download karti hai (progress ke saath) aur
+///      sha256 verify karti hai
+///   4. Phir Android ka installer khol deti hai (user "Install" dabata hai)
+///
+/// Android pe app khud chup-chaap install nahi kar sakti — aakhri "Install"
+/// tap user ka hota hai, yeh platform ki majboori hai.
 class UpdateService {
   static const String _versionUrl =
       'https://raw.githubusercontent.com/ABDULLAH-AMJID/small-school-managment-system/main/version.json';
 
   /// Fallback, agar version.json mein `apkUrl` na ho.
   static const String _defaultApkUrl =
-      'https://github.com/ABDULLAH-AMJID/small-school-managment-system/blob/main/apk/school-management-v1.0.1-universal.apk?raw=true';
+      'https://github.com/ABDULLAH-AMJID/small-school-managment-system/blob/main/apk/school-management-v1.1.0-universal.apk?raw=true';
 
   String _currentVersion = '...';
   String? _latestVersion;
   String? _updateNotes;
   String? _apkUrl;
+  String? _apkSha256;
   bool autoUpdateEnabled = true;
   bool _checking = false;
   String? _lastError;
 
-  String get currentVersion => _currentVersion;
+  bool get latestVersionAvailable => _latestVersion != null;
   String? get latestVersion => _latestVersion;
   String? get updateNotes => _updateNotes;
+  String? get apkUrl => _apkUrl;
   String? get lastError => _lastError;
   bool get isChecking => _checking;
+  String get currentVersion => _currentVersion;
 
   bool get updateAvailable =>
       _latestVersion != null &&
@@ -60,7 +71,6 @@ class UpdateService {
   }
 
   /// GitHub se version.json fetch karke compare karta hai.
-  /// Returns true agar naya version available hai.
   Future<bool> checkForUpdates() async {
     _checking = true;
     _lastError = null;
@@ -84,6 +94,8 @@ class UpdateService {
           _updateNotes = data['notes'] as String?;
           final url = data['apkUrl'] as String?;
           _apkUrl = (url == null || url.isEmpty) ? _defaultApkUrl : url;
+          final hash = data['sha256'] as String?;
+          _apkSha256 = (hash == null || hash.isEmpty) ? null : hash.trim();
           available = updateAvailable;
         } else {
           _lastError = 'version.json samajh nahi aaya';
@@ -108,7 +120,7 @@ class UpdateService {
     }
   }
 
-  /// Launch pe silent check (Settings khulne par bhi hota hai).
+  /// Launch pe silent check.
   Future<void> autoCheck() async {
     if (!autoUpdateEnabled) return;
     await checkForUpdates();
@@ -121,7 +133,7 @@ class UpdateService {
         .split('+')
         .first
         .split('.')
-        .map((p) => int.tryParse(p.trim()) ?? 0)
+        .map((part) => int.tryParse(part.trim()) ?? 0)
         .toList();
 
     final l = parse(latest);
@@ -136,19 +148,109 @@ class UpdateService {
     return false;
   }
 
-  /// APK download page browser mein kholta hai.
+  /// APK ka safe filename banata hai (version se), taake har version ki apni
+  /// file ho aur purani download confuse na kare.
+  static String apkFileName(String version) {
+    final safe = version.replaceAll(RegExp(r'[^0-9A-Za-z._-]'), '_');
+    return 'school-management-v$safe-universal.apk';
+  }
+
+  /// Downloaded APK ka folder. `file_paths.xml` mein isi ko share kiya gaya hai.
+  static Future<Directory> apkDir() async {
+    final base = await getExternalStorageDirectory() ??
+        await getApplicationSupportDirectory();
+    final dir = Directory(p.join(base.path, 'apk'));
+    if (!await dir.exists()) {
+      await dir.create(recursive: true);
+    }
+    return dir;
+  }
+
+  /// APK download karta hai, progress [onProgress] pe bhejta hai (0.0 - 1.0).
   ///
-  /// Purana code yahan sirf SnackBar dikhata tha aur kehta tha "next restart pe
-  /// update ho jayega" — magar koi patching hoti hi nahi thi. Ab user ko saaf
-  /// bataya jata hai ke APK download karke install karna hoga.
+  /// Pehle `.part` file mein download hota hai taake adhoori download ko mukammal
+  /// APK na samjha jaye. Agar version.json mein sha256 hai to verify bhi hota
+  /// hai — warna GitHub ki jagah koi beech mein file badal de to pata chale.
+  ///
+  /// [url], [dir] aur [expectedSha256] normally version.json se aate hain;
+  /// parameters is liye hain ke test inhe inject kar sake.
+  Future<File> downloadApk({
+    void Function(double progress)? onProgress,
+    String? url,
+    String? version,
+    Directory? dir,
+    String? expectedSha256,
+  }) async {
+    final downloadUrl = url ?? _apkUrl ?? _defaultApkUrl;
+    final fileVersion = version ?? _latestVersion ?? _currentVersion;
+    final sha = expectedSha256 ?? _apkSha256;
+    final folder = dir ?? await apkDir();
+    final target = File(p.join(folder.path, apkFileName(fileVersion)));
+    final part = File('${target.path}.part');
+
+    if (await target.exists() && await verifySha256(target, sha)) {
+      onProgress?.call(1.0);
+      return target;
+    }
+    if (await part.exists()) await part.delete();
+
+    final dio = Dio(BaseOptions(
+      connectTimeout: const Duration(seconds: 20),
+      receiveTimeout: const Duration(minutes: 10),
+      followRedirects: true,
+    ));
+
+    try {
+      await dio.download(
+        downloadUrl,
+        part.path,
+        onReceiveProgress: (received, total) {
+          if (total > 0) {
+            onProgress?.call(received / total);
+          }
+        },
+      );
+    } catch (e) {
+      if (await part.exists()) await part.delete();
+      throw 'Download fail hua: $e';
+    }
+
+    if (!await part.exists() || await part.length() == 0) {
+      throw 'Download adhoora reh gaya (file khaali hai).';
+    }
+
+    if (!await verifySha256(part, sha)) {
+      await part.delete();
+      throw 'File ki sha256 verify nahi hui — download corrupt ya badla hua hai. '
+          'Dobara koshish karein.';
+    }
+
+    if (await target.exists()) await target.delete();
+    return part.rename(target.path);
+  }
+
+  /// File ka sha256 [expected] se milata hai. [expected] null ho to `true`
+  /// (verify karne ko kuch nahi) — version.json mein sha256 optional hai.
+  static Future<bool> verifySha256(File file, String? expected) async {
+    final want = expected?.trim().toLowerCase();
+    if (want == null || want.isEmpty) return true;
+    return await sha256OfFile(file) == want;
+  }
+
+  static Future<String> sha256OfFile(File file) async {
+    final digest = await sha256.bind(file.openRead()).first;
+    return digest.toString();
+  }
+
+  /// Browser mein APK download page kholta hai (fallback, agar in-app download
+  /// fail ho ya user chahe).
   Future<bool> openDownloadPage(BuildContext context) async {
     final uri = Uri.parse(_apkUrl ?? _defaultApkUrl);
     try {
       final ok = await launchUrl(uri, mode: LaunchMode.externalApplication);
       if (!ok && context.mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(
-              content: Text('Browser nahi khul saka. Link: ${uri.toString()}')),
+          SnackBar(content: Text('Browser nahi khul saka. Link: $uri')),
         );
       }
       return ok;

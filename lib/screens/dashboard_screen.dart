@@ -13,8 +13,14 @@ class DashboardScreen extends StatefulWidget {
 class _DashboardScreenState extends State<DashboardScreen> {
   int _selectedIndex = 0;
 
-  AppUser get user => widget.currentUser ??
-      AppUser(username: '-', password: '-', name: 'User', phone: '', role: AppRole.admin);
+  AppUser get user =>
+      widget.currentUser ??
+      AppUser(
+          username: '-',
+          password: '-',
+          name: 'User',
+          phone: '',
+          role: AppRole.admin);
 
   @override
   Widget build(BuildContext context) {
@@ -22,7 +28,10 @@ class _DashboardScreenState extends State<DashboardScreen> {
       appBar: AppBar(
         title: Text('Dashboard'),
         actions: [
-          IconButton(icon: Icon(Icons.logout), onPressed: () => Navigator.pushReplacementNamed(context, '/login')),
+          IconButton(
+              icon: Icon(Icons.logout),
+              onPressed: () =>
+                  Navigator.pushReplacementNamed(context, '/login')),
         ],
       ),
       drawer: _buildDrawer(),
@@ -33,7 +42,8 @@ class _DashboardScreenState extends State<DashboardScreen> {
         items: const [
           BottomNavigationBarItem(icon: Icon(Icons.home), label: 'Home'),
           BottomNavigationBarItem(icon: Icon(Icons.update), label: 'Updates'),
-          BottomNavigationBarItem(icon: Icon(Icons.settings), label: 'Settings'),
+          BottomNavigationBarItem(
+              icon: Icon(Icons.settings), label: 'Settings'),
         ],
       ),
     );
@@ -51,21 +61,37 @@ class _DashboardScreenState extends State<DashboardScreen> {
               children: [
                 Icon(Icons.school, size: 48, color: Colors.white),
                 const SizedBox(height: 10),
-                Text(user.name, style: const TextStyle(color: Colors.white, fontSize: 18, fontWeight: FontWeight.bold)),
-                Text(user.role.label, style: const TextStyle(color: Colors.white70, fontSize: 14)),
+                Text(user.name,
+                    style: const TextStyle(
+                        color: Colors.white,
+                        fontSize: 18,
+                        fontWeight: FontWeight.bold)),
+                Text(user.role.label,
+                    style:
+                        const TextStyle(color: Colors.white70, fontSize: 14)),
               ],
             ),
           ),
           _drawerTile('Dashboard', Icons.home, '/dashboard'),
-          if (user.role == AppRole.admin || user.role == AppRole.teacher) _drawerTile('Students', Icons.people, '/students'),
-          if (user.role == AppRole.admin) _drawerTile('Teachers', Icons.person, '/teachers'),
-          if (user.role == AppRole.admin || user.role == AppRole.teacher) _drawerTile('Attendance', Icons.check_circle, '/attendance'),
-          if (user.role == AppRole.admin || user.role == AppRole.teacher) _drawerTile('Exams', Icons.assignment, '/exams'),
-          if (user.role == AppRole.admin || user.role == AppRole.teacher) _drawerTile('Timetable', Icons.schedule, '/timetable'),
-          if (user.role == AppRole.admin || user.role == AppRole.teacher) _drawerTile('Marks', Icons.grade, '/marks'),
-          if (user.role == AppRole.admin || user.role == AppRole.teacher) _drawerTile('Fees', Icons.payments, '/fees'),
-          if (user.role == AppRole.admin || user.role == AppRole.teacher) _drawerTile('Weekly Report', Icons.article, '/weeklyreport'),
-          if (user.role == AppRole.parent) _drawerTile('Child Report', Icons.assignment, '/reportcard'),
+          if (user.role == AppRole.admin || user.role == AppRole.teacher)
+            _drawerTile('Students', Icons.people, '/students'),
+          if (user.role == AppRole.admin)
+            _drawerTile('Teachers', Icons.person, '/teachers'),
+          _drawerTile('Classes', Icons.category, '/classes'),
+          if (user.role == AppRole.admin || user.role == AppRole.teacher)
+            _drawerTile('Attendance', Icons.check_circle, '/attendance'),
+          if (user.role == AppRole.admin || user.role == AppRole.teacher)
+            _drawerTile('Exams', Icons.assignment, '/exams'),
+          if (user.role == AppRole.admin || user.role == AppRole.teacher)
+            _drawerTile('Timetable', Icons.schedule, '/timetable'),
+          if (user.role == AppRole.admin || user.role == AppRole.teacher)
+            _drawerTile('Marks', Icons.grade, '/marks'),
+          if (user.role == AppRole.admin || user.role == AppRole.teacher)
+            _drawerTile('Fees', Icons.payments, '/fees'),
+          if (user.role == AppRole.admin || user.role == AppRole.teacher)
+            _drawerTile('Weekly Report', Icons.article, '/weeklyreport'),
+          if (user.role == AppRole.parent)
+            _drawerTile('Child Report', Icons.assignment, '/reportcard'),
           _drawerTile('Settings', Icons.settings, '/settings'),
           const Divider(),
           ListTile(
@@ -113,7 +139,10 @@ class _DashboardScreenState extends State<DashboardScreen> {
         _item('Exams', Icons.assignment, '/exams'),
         _item('Timetable', Icons.schedule, '/timetable'),
       ]);
-      if (role == AppRole.admin) items.add(_item('Teachers', Icons.person, '/teachers'));
+      if (role == AppRole.admin) {
+        items.add(_item('Teachers', Icons.person, '/teachers'));
+        items.add(_item('Classes', Icons.category, '/classes'));
+      }
       items.addAll([
         _item('Marks', Icons.grade, '/marks'),
         _item('Fees', Icons.payments, '/fees'),
@@ -127,7 +156,10 @@ class _DashboardScreenState extends State<DashboardScreen> {
       padding: const EdgeInsets.all(12),
       child: GridView.builder(
         gridDelegate: const SliverGridDelegateWithFixedCrossAxisCount(
-          crossAxisCount: 2, childAspectRatio: 1.6, crossAxisSpacing: 12, mainAxisSpacing: 12,
+          crossAxisCount: 2,
+          childAspectRatio: 1.6,
+          crossAxisSpacing: 12,
+          mainAxisSpacing: 12,
         ),
         itemCount: items.length,
         itemBuilder: (_, i) {
@@ -138,7 +170,9 @@ class _DashboardScreenState extends State<DashboardScreen> {
               children: [
                 Icon(it['icon'] as IconData, size: 36, color: AppTheme.primary),
                 const SizedBox(height: 10),
-                Text(it['title'] as String, style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 15)),
+                Text(it['title'] as String,
+                    style: const TextStyle(
+                        fontWeight: FontWeight.bold, fontSize: 15)),
               ],
             ),
             onTap: () => Navigator.pushNamed(context, it['route'] as String),
@@ -159,7 +193,8 @@ class _DashboardScreenState extends State<DashboardScreen> {
           const SizedBox(height: 8),
           Text('Version 1.0.0', style: AppTheme.caption),
           const SizedBox(height: 20),
-          Text('Shorebird OTA updates apply automatically on restart.', textAlign: TextAlign.center, style: AppTheme.body),
+          Text('Shorebird OTA updates apply automatically on restart.',
+              textAlign: TextAlign.center, style: AppTheme.body),
         ],
       ),
     );

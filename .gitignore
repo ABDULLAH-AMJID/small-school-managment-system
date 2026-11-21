@@ -47,6 +47,6 @@ app.*.map.json
 # Widget Preview related
 .widget_preview/
 
-# Built APKs: sirf release APK track hota hai, baqi local build outputs ignored
+# Built APKs (sirf latest release repo mein jaye, baaki local rahein)
 /apk/*
-!/apk/school-management-v1.0.1-universal.apk
+!/apk/school-management-v1.1.0-universal.apk

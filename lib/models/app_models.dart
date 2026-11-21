@@ -2,12 +2,16 @@ import 'package:equatable/equatable.dart';
 
 /// ---------- ROLES ---------- ///
 enum AppRole { admin, teacher, parent }
+
 extension AppRoleExt on AppRole {
   String get label {
     switch (this) {
-      case AppRole.admin: return 'Admin';
-      case AppRole.teacher: return 'Ustad';
-      case AppRole.parent: return 'Walidain';
+      case AppRole.admin:
+        return 'Admin';
+      case AppRole.teacher:
+        return 'Ustad';
+      case AppRole.parent:
+        return 'Walidain';
     }
   }
 }
@@ -70,6 +74,11 @@ class Student extends Equatable {
   final String admissionDate;
   final String? photoPath;
   final bool isActive;
+
+  /// Fee ka hisaab kis mahine se shuru hoga ("YYYY-MM"). Khaali ho to
+  /// admission month (ya current month) istemaal hota hai.
+  final String feeStartMonth;
+
   Student({
     this.id,
     required this.name,
@@ -83,6 +92,7 @@ class Student extends Equatable {
     this.admissionDate = '',
     this.photoPath,
     this.isActive = true,
+    this.feeStartMonth = '',
   });
   Map<String, dynamic> toMap() => {
         'id': id,
@@ -97,6 +107,7 @@ class Student extends Equatable {
         'admission_date': admissionDate,
         'photo_path': photoPath,
         'is_active': isActive ? 1 : 0,
+        'fee_start_month': feeStartMonth,
       };
   factory Student.fromMap(Map<String, dynamic> m) => Student(
         id: m['id'],
@@ -111,9 +122,10 @@ class Student extends Equatable {
         admissionDate: m['admission_date'] ?? '',
         photoPath: m['photo_path'],
         isActive: (m['is_active'] ?? 1) == 1,
+        feeStartMonth: m['fee_start_month'] ?? '',
       );
   @override
-  List<Object?> get props => [id, rollNo, className];
+  List<Object?> get props => [id, rollNo, className, feeStartMonth];
 }
 
 /// ---------- TEACHER ---------- ///
@@ -184,7 +196,8 @@ class StudentAttendance extends Equatable {
         'class_name': className,
         'marked_by': markedBy,
       };
-  factory StudentAttendance.fromMap(Map<String, dynamic> m) => StudentAttendance(
+  factory StudentAttendance.fromMap(Map<String, dynamic> m) =>
+      StudentAttendance(
         id: m['id'],
         studentId: m['student_id'],
         date: m['date'] ?? '',
@@ -214,7 +227,8 @@ class TeacherAttendance extends Equatable {
         'date': date,
         'status': status,
       };
-  factory TeacherAttendance.fromMap(Map<String, dynamic> m) => TeacherAttendance(
+  factory TeacherAttendance.fromMap(Map<String, dynamic> m) =>
+      TeacherAttendance(
         id: m['id'],
         teacherId: m['teacher_id'],
         date: m['date'] ?? '',
@@ -231,12 +245,43 @@ class Exam extends Equatable {
   final String className;
   final String startDate;
   final String endDate;
+
+  /// Exam ki type — is se tay hota hai ke har subject ke kitne total marks
+  /// honge (class settings mein mid/final/weekly/monthly alag alag set hote
+  /// hain). Values [Exam.examTypes] mein hain.
+  final String examType;
+
+  /// Supported exam types. Class settings mein har subject ke liye inhi ke
+  /// marks set hote hain.
+  static const List<String> examTypes = [
+    'Mid Term',
+    'Final Term',
+    'Weekly Test',
+    'Monthly Test',
+  ];
+
+  /// [examType] ke liye [ClassSubject] ka kaunsa field istemaal hoga.
+  static String marksFieldFor(String examType) {
+    switch (examType) {
+      case 'Final Term':
+        return 'final_marks';
+      case 'Weekly Test':
+        return 'weekly_marks';
+      case 'Monthly Test':
+        return 'monthly_marks';
+      case 'Mid Term':
+      default:
+        return 'mid_marks';
+    }
+  }
+
   Exam({
     this.id,
     required this.name,
     required this.className,
     required this.startDate,
     required this.endDate,
+    this.examType = 'Mid Term',
   });
   Map<String, dynamic> toMap() => {
         'id': id,
@@ -244,6 +289,7 @@ class Exam extends Equatable {
         'class_name': className,
         'start_date': startDate,
         'end_date': endDate,
+        'exam_type': examType,
       };
   factory Exam.fromMap(Map<String, dynamic> m) => Exam(
         id: m['id'],
@@ -251,9 +297,288 @@ class Exam extends Equatable {
         className: m['class_name'] ?? '',
         startDate: m['start_date'] ?? '',
         endDate: m['end_date'] ?? '',
+        examType: (m['exam_type'] as String?)?.isNotEmpty == true
+            ? m['exam_type'] as String
+            : 'Mid Term',
       );
   @override
-  List<Object?> get props => [id, name, className];
+  List<Object?> get props => [id, name, className, examType];
+}
+
+/// ---------- CLASS SETTINGS ---------- ///
+/// Har class ki default priorities: monthly fee aur us class ke subjects.
+class SchoolClass extends Equatable {
+  final int? id;
+  final String name; // e.g. "1st", "10th"
+  final double monthlyFee;
+  final bool isActive;
+
+  SchoolClass({
+    this.id,
+    required this.name,
+    this.monthlyFee = 0,
+    this.isActive = true,
+  });
+
+  Map<String, dynamic> toMap() => {
+        'id': id,
+        'name': name,
+        'monthly_fee': monthlyFee,
+        'is_active': isActive ? 1 : 0,
+      };
+
+  factory SchoolClass.fromMap(Map<String, dynamic> m) => SchoolClass(
+        id: m['id'],
+        name: m['name'] ?? '',
+        monthlyFee: (m['monthly_fee'] ?? 0).toDouble(),
+        isActive: (m['is_active'] ?? 1) == 1,
+      );
+
+  @override
+  List<Object?> get props => [id, name, monthlyFee, isActive];
+}
+
+/// Ek class ka ek subject, aur uske marks ke totals (exam type ke hisaab se).
+class ClassSubject extends Equatable {
+  final int? id;
+  final String className;
+  final String subject;
+
+  /// Default total marks (jab exam type ka apna total set na ho).
+  final double totalMarks;
+  final double midMarks;
+  final double finalMarks;
+  final double weeklyMarks;
+  final double monthlyMarks;
+  final int sortOrder;
+
+  ClassSubject({
+    this.id,
+    required this.className,
+    required this.subject,
+    this.totalMarks = 100,
+    this.midMarks = 0,
+    this.finalMarks = 0,
+    this.weeklyMarks = 0,
+    this.monthlyMarks = 0,
+    this.sortOrder = 0,
+  });
+
+  /// Exam type ke hisaab se total marks. Agar us type ka total set nahi (0)
+  /// to [totalMarks] par fallback — warna exam mein 0 ke out of marks aa jate.
+  double totalFor(String examType) {
+    final v = switch (examType) {
+      'Final Term' => finalMarks,
+      'Weekly Test' => weeklyMarks,
+      'Monthly Test' => monthlyMarks,
+      _ => midMarks,
+    };
+    return v > 0 ? v : totalMarks;
+  }
+
+  Map<String, dynamic> toMap() => {
+        'id': id,
+        'class_name': className,
+        'subject': subject,
+        'total_marks': totalMarks,
+        'mid_marks': midMarks,
+        'final_marks': finalMarks,
+        'weekly_marks': weeklyMarks,
+        'monthly_marks': monthlyMarks,
+        'sort_order': sortOrder,
+      };
+
+  factory ClassSubject.fromMap(Map<String, dynamic> m) => ClassSubject(
+        id: m['id'],
+        className: m['class_name'] ?? '',
+        subject: m['subject'] ?? '',
+        totalMarks: (m['total_marks'] ?? 100).toDouble(),
+        midMarks: (m['mid_marks'] ?? 0).toDouble(),
+        finalMarks: (m['final_marks'] ?? 0).toDouble(),
+        weeklyMarks: (m['weekly_marks'] ?? 0).toDouble(),
+        monthlyMarks: (m['monthly_marks'] ?? 0).toDouble(),
+        sortOrder: m['sort_order'] ?? 0,
+      );
+
+  @override
+  List<Object?> get props =>
+      [id, className, subject, totalMarks, midMarks, finalMarks];
+}
+
+/// Exam banate waqt chune gaye subjects (aur unke totals us exam ke liye).
+class ExamSubject extends Equatable {
+  final int? id;
+  final int examId;
+  final String subject;
+  final double totalMarks;
+
+  ExamSubject({
+    this.id,
+    required this.examId,
+    required this.subject,
+    this.totalMarks = 100,
+  });
+
+  Map<String, dynamic> toMap() => {
+        'id': id,
+        'exam_id': examId,
+        'subject': subject,
+        'total_marks': totalMarks,
+      };
+
+  factory ExamSubject.fromMap(Map<String, dynamic> m) => ExamSubject(
+        id: m['id'],
+        examId: m['exam_id'],
+        subject: m['subject'] ?? '',
+        totalMarks: (m['total_marks'] ?? 100).toDouble(),
+      );
+
+  @override
+  List<Object?> get props => [id, examId, subject, totalMarks];
+}
+
+/// Fee ki ek adaiigi (receipt). Installments isi se banti hain — ek hi month
+/// ke against kitni bhi payments record ho sakti hain.
+class FeePayment extends Equatable {
+  final int? id;
+  final int studentId;
+  final String month; // "YYYY-MM"
+  final double amount;
+  final String paidDate; // yyyy-MM-dd
+  final String note;
+
+  FeePayment({
+    this.id,
+    required this.studentId,
+    required this.month,
+    required this.amount,
+    this.paidDate = '',
+    this.note = '',
+  });
+
+  Map<String, dynamic> toMap() => {
+        'id': id,
+        'student_id': studentId,
+        'month': month,
+        'amount': amount,
+        'paid_date': paidDate,
+        'note': note,
+      };
+
+  factory FeePayment.fromMap(Map<String, dynamic> m) => FeePayment(
+        id: m['id'],
+        studentId: m['student_id'],
+        month: m['month'] ?? '',
+        amount: (m['amount'] ?? 0).toDouble(),
+        paidDate: m['paid_date'] ?? '',
+        note: m['note'] ?? '',
+      );
+
+  @override
+  List<Object?> get props => [id, studentId, month, amount];
+}
+
+/// Fee ka hisaab (UI ke liye) — database table nahi.
+class FeeLedger {
+  FeeLedger({
+    required this.monthlyFee,
+    required this.months,
+    required this.payments,
+  });
+
+  final double monthlyFee;
+
+  /// "YYYY-MM" ki list, purane se naye.
+  final List<String> months;
+
+  /// month -> jama shuda raqam.
+  final Map<String, double> payments;
+
+  double payableFor(String month) => monthlyFee;
+
+  double paidFor(String month) => payments[month] ?? 0;
+
+  double balanceFor(String month) => payableFor(month) - paidFor(month);
+
+  double get totalPayable => monthlyFee * months.length;
+
+  double get totalPaid =>
+      months.fold(0.0, (sum, m) => sum + (payments[m] ?? 0));
+
+  double get totalBalance => totalPayable - totalPaid;
+
+  /// Jitne mahinon ka kuch na kuch baqi hai.
+  List<String> get pendingMonths =>
+      months.where((m) => balanceFor(m) > 0.005).toList();
+
+  int get pendingMonthCount => pendingMonths.length;
+
+  bool isPaid(String month) => balanceFor(month) <= 0.005;
+
+  bool isPartial(String month) =>
+      paidFor(month) > 0.005 && balanceFor(month) > 0.005;
+
+  String statusFor(String month) {
+    if (isPaid(month)) return 'Paid';
+    if (isPartial(month)) return 'Partial';
+    return 'Pending';
+  }
+
+  /// Month labels, e.g. "2026-11" -> "Nov 2026".
+  static String monthLabel(String yyyymm) {
+    final parts = yyyymm.split('-');
+    if (parts.length != 2) return yyyymm;
+    const names = [
+      'Jan',
+      'Feb',
+      'Mar',
+      'Apr',
+      'May',
+      'Jun',
+      'Jul',
+      'Aug',
+      'Sep',
+      'Oct',
+      'Nov',
+      'Dec',
+    ];
+    final y = parts[0];
+    final m = int.tryParse(parts[1]) ?? 0;
+    if (m < 1 || m > 12) return yyyymm;
+    return '${names[m - 1]} $y';
+  }
+
+  static String currentMonth([DateTime? now]) {
+    final d = now ?? DateTime.now();
+    return '${d.year}-${d.month.toString().padLeft(2, '0')}';
+  }
+
+  /// [from] se [to] tak ke tamam months (dono shamil), "YYYY-MM".
+  static List<String> monthsBetween(String from, String to) {
+    final out = <String>[];
+    final f = _parse(from);
+    final t = _parse(to);
+    if (f == null || t == null) return out;
+    var cur = DateTime(f.year, f.month);
+    final end = DateTime(t.year, t.month);
+    // Hadd se zyada loop se bachao (e.g. ghalat date ki wajah se).
+    var guard = 0;
+    while (!cur.isAfter(end) && guard < 600) {
+      out.add('${cur.year}-${cur.month.toString().padLeft(2, '0')}');
+      cur = DateTime(cur.year, cur.month + 1);
+      guard++;
+    }
+    return out;
+  }
+
+  static DateTime? _parse(String yyyymm) {
+    final parts = yyyymm.split('-');
+    if (parts.length != 2) return null;
+    final y = int.tryParse(parts[0]);
+    final m = int.tryParse(parts[1]);
+    if (y == null || m == null || m < 1 || m > 12) return null;
+    return DateTime(y, m);
+  }
 }
 
 /// ---------- TIMETABLE ---------- ///

@@ -2,7 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:google_fonts/google_fonts.dart';
 
 class AppTheme {
-  static const Color primary = Color(0xFF1E3A8A);      // deep blue
+  static const Color primary = Color(0xFF1E3A8A); // deep blue
   static const Color primaryDark = Color(0xFF16407A);
   static const Color accent = Color(0xFF2563EB);
   static const Color bg = Color(0xFFF1F5F9);
@@ -51,9 +51,15 @@ class AppTheme {
     inputDecorationTheme: InputDecorationTheme(
       filled: true,
       fillColor: Colors.white,
-      border: OutlineInputBorder(borderRadius: BorderRadius.circular(10), borderSide: const BorderSide(color: Color(0xFFCBD5E1))),
-      enabledBorder: OutlineInputBorder(borderRadius: BorderRadius.circular(10), borderSide: const BorderSide(color: Color(0xFFCBD5E1))),
-      focusedBorder: OutlineInputBorder(borderRadius: BorderRadius.circular(10), borderSide: const BorderSide(color: primary, width: 1.5)),
+      border: OutlineInputBorder(
+          borderRadius: BorderRadius.circular(10),
+          borderSide: const BorderSide(color: Color(0xFFCBD5E1))),
+      enabledBorder: OutlineInputBorder(
+          borderRadius: BorderRadius.circular(10),
+          borderSide: const BorderSide(color: Color(0xFFCBD5E1))),
+      focusedBorder: OutlineInputBorder(
+          borderRadius: BorderRadius.circular(10),
+          borderSide: const BorderSide(color: primary, width: 1.5)),
       contentPadding: const EdgeInsets.symmetric(vertical: 14, horizontal: 14),
     ),
     cardTheme: CardThemeData(
@@ -66,13 +72,19 @@ class AppTheme {
   );
 
   static TextStyle get heading => GoogleFonts.poppins(
-        fontSize: 20, fontWeight: FontWeight.bold, color: textDark,
+        fontSize: 20,
+        fontWeight: FontWeight.bold,
+        color: textDark,
       );
   static TextStyle get subHeading => GoogleFonts.poppins(
-        fontSize: 15, fontWeight: FontWeight.w600, color: primaryDark,
+        fontSize: 15,
+        fontWeight: FontWeight.w600,
+        color: primaryDark,
       );
-  static TextStyle get body => GoogleFonts.poppins(fontSize: 14, color: textDark);
-  static TextStyle get caption => GoogleFonts.poppins(fontSize: 12, color: textMuted);
+  static TextStyle get body =>
+      GoogleFonts.poppins(fontSize: 14, color: textDark);
+  static TextStyle get caption =>
+      GoogleFonts.poppins(fontSize: 12, color: textMuted);
 }
 
 class AppCard extends StatelessWidget {

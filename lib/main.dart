@@ -6,6 +6,7 @@ import 'package:small_school_management/screens/login_screen.dart';
 import 'package:small_school_management/screens/dashboard_screen.dart';
 import 'package:small_school_management/screens/student_screen.dart';
 import 'package:small_school_management/screens/teacher_screen.dart';
+import 'package:small_school_management/screens/class_screen.dart';
 import 'package:small_school_management/screens/attendance_screen.dart';
 import 'package:small_school_management/screens/exam_screen.dart';
 import 'package:small_school_management/screens/timetable_screen.dart';
@@ -33,9 +34,11 @@ class SchoolApp extends StatelessWidget {
         final widgets = {
           '/': (context) => const SplashScreen(),
           '/login': (context) => const LoginScreen(),
-          '/dashboard': (context) => DashboardScreen(currentUser: settings.arguments as AppUser?),
+          '/dashboard': (context) =>
+              DashboardScreen(currentUser: settings.arguments as AppUser?),
           '/students': (context) => const StudentScreen(),
           '/teachers': (context) => const TeacherScreen(),
+          '/classes': (context) => const ClassScreen(),
           '/attendance': (context) => const AttendanceScreen(),
           '/exams': (context) => const ExamScreen(),
           '/timetable': (context) => const TimetableScreen(),

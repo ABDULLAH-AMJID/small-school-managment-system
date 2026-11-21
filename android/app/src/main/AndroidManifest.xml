@@ -3,6 +3,10 @@
          Pehle yeh sirf debug manifest mein tha, is liye release build mein
          UpdateService.checkForUpdates() hamesha fail hota tha. -->
     <uses-permission android:name="android.permission.INTERNET"/>
+    <!-- App ke andar hi APK download karke install karne ke liye (in-app update).
+         Android 8+ pe user ko "Install unknown apps" ki ijazat deni parti hai;
+         app us settings page tak le jati hai (ApkInstallerPlugin.openInstallSettings). -->
+    <uses-permission android:name="android.permission.REQUEST_INSTALL_PACKAGES"/>
     <application
         android:label="School Management"
         android:name="${applicationName}"
@@ -29,6 +33,18 @@
                 <category android:name="android.intent.category.LAUNCHER"/>
             </intent-filter>
         </activity>
+        <!-- Downloaded APK ko installer tak content:// URI se pohanchane ke liye.
+             Android 7+ pe file:// URI share karna FileUriExposedException deta hai.
+             Share karne wale folders res/xml/file_paths.xml mein defined hain. -->
+        <provider
+            android:name="androidx.core.content.FileProvider"
+            android:authorities="com.schoolapp.small_school_management.fileprovider"
+            android:exported="false"
+            android:grantUriPermissions="true">
+            <meta-data
+                android:name="android.support.FILE_PROVIDER_PATHS"
+                android:resource="@xml/file_paths" />
+        </provider>
         <!-- Don't delete the meta-data below.
              This is used by the Flutter tool to generate GeneratedPluginRegistrant.java -->
         <meta-data
@@ -56,6 +72,15 @@
         <intent>
             <action android:name="android.intent.action.SEND"/>
             <data android:mimeType="*/*"/>
+        </intent>
+        <!-- Android 11+ package visibility: APK installer resolve karne ke liye,
+             warna install intent khaali nikal jata hai. -->
+        <intent>
+            <action android:name="android.intent.action.VIEW"/>
+            <data android:mimeType="application/vnd.android.package-archive"/>
+        </intent>
+        <intent>
+            <action android:name="android.intent.action.INSTALL_PACKAGE"/>
         </intent>
     </queries>
 </manifest>

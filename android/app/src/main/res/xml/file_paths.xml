@@ -1,0 +1,16 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!--
+  FileProvider ke share karne wale folders.
+
+  Sirf woh paths yahan likhein jo asal mein share karne hon — jitna chhota
+  scope, utna behtar. Hum sirf downloaded APK (external-files-path/apk) share
+  karte hain, aur cache (download ke dauraan .part file ke liye).
+-->
+<paths>
+    <external-files-path
+        name="apk"
+        path="apk/" />
+    <external-cache-path
+        name="cache"
+        path="." />
+</paths>
